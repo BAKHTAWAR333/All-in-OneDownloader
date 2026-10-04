@@ -8,7 +8,7 @@ Browser → `GET /api/download?url=ENCODED_PUBLIC_URL` → server → **only** `
 
 `api/download.js` is the Vercel function; `server/media-service.js` shares validation and provider access with local Vite development and the existing Netlify function. No public CORS relay, alternate API, sample media, fabricated links, or fallback success results are used. This backend integrates the supplied extraction service; it is not an independent extractor and cannot repair that service's outages or unsupported response schemas.
 
-Successful responses must have `status: "success"`, `video_info` and `video_info.available_formats`. Each usable format must contain an absolute HTTP(S) `download_url`. The original JSON and its metadata/format fields are returned without synthesizing qualities or converting files. Invalid individual links are not offered as downloads. MP3 appears only when actually returned; other audio formats retain their real extensions. Title, uploader, thumbnail and original link use the provider's values when present.
+Successful responses must have `success: true` (or the provider's legacy `status: "success"`), `video_info`, and top-level `available_formats`. A nested `video_info.available_formats` is read only for backward compatibility with an older provider response. Each usable format must contain an absolute HTTP(S) `download_url`. The original JSON and its metadata/format fields are returned without synthesizing qualities or converting files. Invalid individual links are not offered as downloads. MP3 appears only when actually returned; other audio formats retain their real extensions. Title, uploader, thumbnail and original link use the provider's values when present.
 
 ## Install and run locally
 
@@ -43,7 +43,7 @@ Existing Netlify deployment remains supported through the `/api/download` rewrit
 
 ## Safety and operational limitations
 
-- Only explicitly listed platform hostnames and their subdomains are accepted. Credential URLs, custom ports, IP literals, local hosts, unsafe protocols, and unsupported platforms are rejected before any provider request.
+- Public HTTP(S) URLs are accepted and passed only to the supplied provider, so its current supported-platform list remains the source of truth (including newly added platforms). Credential URLs, custom ports, IP literals, local hosts and unsafe protocols are rejected before any provider request.
 - The server contacts a fixed upstream host, refuses redirects, limits response size to 2 MiB, and times out after 25 seconds. The frontend times out after 30 seconds. Responses are not cached because signed media links expire.
 - Download buttons use exactly the selected API `download_url` in the user's click event, avoiding async popup blocking and accidental selection by duplicate quality labels. Cross-origin servers may ignore the HTML `download` attribute and open a player instead; saving behavior is controlled by the media host. No unbounded media proxy or transcoding is included.
 - Only use public content you own or have permission to download, and where platform rules permit it. No cookies, login tokens, DRM workarounds, paywall bypasses or private-content extraction are implemented. Public visibility alone does not grant download permission, and provider behavior/rights cannot be guaranteed by this proxy.
@@ -53,4 +53,3 @@ Existing Netlify deployment remains supported through the `/api/download` rewrit
 ## Error contract
 
 Errors return `{ "status": "error", "message": "User-friendly explanation" }`: 400 for invalid/missing URL, 405 for unsupported method, 422 for unsupported platforms/extraction failure/no usable formats, 502 for upstream/network/empty or malformed response, and 504 for timeout. Raw upstream error messages, stack traces and credentials are never forwarded.
-"# All-in-OneDownloader" 

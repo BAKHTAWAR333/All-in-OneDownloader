@@ -15,7 +15,7 @@ interface MediaInfo {
 }
 type Status = "idle" | "loading" | "success" | "error";
 
-const platforms = ["YouTube", "TikTok", "Instagram", "Facebook", "Twitter/X", "Snapchat", "SoundCloud", "CapCut", "SnackVideo", "Douyin"];
+const platforms = ["YouTube", "TikTok", "Instagram", "Facebook", "Twitter/X", "Snapchat", "SoundCloud", "Reddit", "CapCut", "SnackVideo", "Douyin"];
 
 function safeUrl(value: unknown): string | undefined {
   if (typeof value !== "string") return;
@@ -28,10 +28,18 @@ function safeUrl(value: unknown): string | undefined {
 function normaliseResponse(payload: unknown): { success: boolean; mediaInfo?: MediaInfo; message?: string } {
   if (!payload || typeof payload !== "object") return { success: false, message: "The service returned an unreadable response." };
   const data = payload as Record<string, unknown>;
-  if (data.status !== "success" || !data.video_info || typeof data.video_info !== "object") return { success: false, message: "No video information was returned. Check the public media link." };
+  if ((data.success !== true && data.status !== "success") || !data.video_info || typeof data.video_info !== "object") return { success: false, message: "No video information was returned. Check that the link is public and supported." };
   const candidate = data.video_info as Record<string, unknown>;
-  if (!Array.isArray(candidate.available_formats)) return { success: false, message: "No download formats were returned for this media." };
-  const formats = candidate.available_formats
+  // `available_formats` belongs to the provider response, alongside
+  // `video_info`. Do not create fallback qualities: every displayed option
+  // must carry the API's real download_url.
+  const availableFormats = Array.isArray(data.available_formats)
+    ? data.available_formats
+    : Array.isArray(candidate.available_formats)
+      ? candidate.available_formats
+      : null;
+  if (!availableFormats) return { success: false, message: "No download formats were returned for this media." };
+  const formats = availableFormats
     .map((item: unknown) => {
       if (!item || typeof item !== "object") return null;
       const format = item as Record<string, unknown>;

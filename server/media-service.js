@@ -1,5 +1,4 @@
 const UPSTREAM = "https://ahm7xmakki.com/api/alldl";
-const PLATFORMS = ["youtube.com", "youtu.be", "instagram.com", "tiktok.com", "facebook.com", "fb.watch", "twitter.com", "x.com", "snapchat.com", "soundcloud.com", "capcut.com", "snackvideo.com", "douyin.com"];
 
 export class DownloadError extends Error {
   constructor(status, message) {
@@ -24,21 +23,24 @@ export function safeHttpUrl(value) {
 
 export function validateMediaUrl(value) {
   if (!safeHttpUrl(value)) throw new DownloadError(400, "Enter a complete public http or https media URL.");
-  const host = new URL(value).hostname.toLowerCase();
-  if (!PLATFORMS.some(domain => host === domain || host.endsWith(`.${domain}`))) {
-    throw new DownloadError(422, "This platform is not supported. Use a public link from a supported platform.");
-  }
   return value;
 }
 
 export function validateResult(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new DownloadError(502, "The media service returned an unreadable response. Try again later.");
-  if (data.status !== "success") throw new DownloadError(422, "This media could not be extracted. Check that it is public and permitted for downloading.");
+  if (data.success !== true && data.status !== "success") throw new DownloadError(422, "This media could not be extracted. Check that the link is public and supported by the media service.");
   const info = data.video_info;
   if (!info || typeof info !== "object" || Array.isArray(info)) throw new DownloadError(502, "The media service did not return video information.");
-  if (!Array.isArray(info.available_formats)) throw new DownloadError(502, "The media service did not return available formats.");
-  if (!info.available_formats.length) throw new DownloadError(422, "No downloadable formats are available for this media.");
-  if (!info.available_formats.some(format => format && safeHttpUrl(format.download_url))) {
+  // The supplied provider returns `video_info` and `available_formats` as
+  // sibling fields. Keep the nested read only for older provider responses.
+  const formats = Array.isArray(data.available_formats)
+    ? data.available_formats
+    : Array.isArray(info.available_formats)
+      ? info.available_formats
+      : null;
+  if (!formats) throw new DownloadError(502, "The media service did not return available formats.");
+  if (!formats.length) throw new DownloadError(422, "No downloadable formats are available for this media.");
+  if (!formats.some(format => format && safeHttpUrl(format.download_url))) {
     throw new DownloadError(422, "The media service did not return a usable download link.");
   }
   return data;
@@ -52,7 +54,6 @@ export async function extractMedia(value) {
     const response = await fetch(`${UPSTREAM}?url=${encodeURIComponent(url)}`, {
       headers: { Accept: "application/json" }, signal: controller.signal, redirect: "error",
     });
-    if (!response.ok) throw new DownloadError(502, "The media service is temporarily unavailable. Please try again later.");
     if (!response.body) throw new DownloadError(502, "The media service returned an empty response.");
     const reader = response.body.getReader();
     const chunks = [];
@@ -74,6 +75,13 @@ export async function extractMedia(value) {
     if (!body.trim()) throw new DownloadError(502, "The media service returned an empty response.");
     let data;
     try { data = JSON.parse(body); } catch { throw new DownloadError(502, "The media service returned an unreadable response. Try again later."); }
+    // A number of provider failures (for example an unsupported platform)
+    // arrive as JSON with a non-2xx HTTP status. Parse that real payload so
+    // the caller receives the appropriate friendly 422 state instead of a
+    // misleading generic availability error.
+    if (!response.ok && (!data || typeof data !== "object" || (data.success !== false && data.status !== "error"))) {
+      throw new DownloadError(502, "The media service is temporarily unavailable. Please try again later.");
+    }
     return validateResult(data);
   } catch (error) {
     if (error instanceof DownloadError) throw error;
