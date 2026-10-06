@@ -4,9 +4,11 @@ The restored React/Vite UI is preserved in `src/`, with its existing entry point
 
 ## Architecture
 
-Browser → `GET /api/download?url=ENCODED_PUBLIC_URL` → server → **only** `https://ahm7xmakki.com/api/alldl?url=ENCODED_PUBLIC_URL` → validated original JSON → existing download UI.
+Browser → `GET /api/download?url=ENCODED_PUBLIC_URL` → server → **only** `https://multidownapi.vercel.app/?url=ENCODED_PUBLIC_URL` → validated original JSON → existing download UI.
 
-`api/download.js` is the Vercel function; `server/media-service.js` shares validation and provider access with local Vite development and the existing Netlify function. No public CORS relay, alternate API, sample media, fabricated links, or fallback success results are used. This backend integrates the supplied extraction service; it is not an independent extractor and cannot repair that service's outages or unsupported response schemas.
+The provider endpoint now matches the latest supplied OmniDownloader HTML logic, replacing the earlier `ahm7xmakki.com` endpoint. Only its extraction logic is adopted, not its branding, layout, CDN scripts or developer/community links. The existing MBK interface is unchanged.
+
+`api/download.js` is the Vercel function; `server/media-service.js` shares validation and provider access with local Vite development and the existing Netlify function. If `/api/download` returns HTML, 404 or 405 (as on static previews), the browser contacts the same supplied provider directly. The provider currently allows browser access with `Access-Control-Allow-Origin: *`; direct requests depend on that policy remaining enabled. JSON errors from the server do not trigger fallback. No public CORS relay, alternate provider, sample media, fabricated links, or fallback success results are used.
 
 Successful responses must have `success: true` (or the provider's legacy `status: "success"`), `video_info`, and top-level `available_formats`. A nested `video_info.available_formats` is read only for backward compatibility with an older provider response. Each usable format must contain an absolute HTTP(S) `download_url`. The original JSON and its metadata/format fields are returned without synthesizing qualities or converting files. Invalid individual links are not offered as downloads. MP3 appears only when actually returned; other audio formats retain their real extensions. Title, uploader, thumbnail and original link use the provider's values when present.
 
@@ -23,7 +25,7 @@ pnpm dev
 
 Open the URL printed by Vite. Vite includes the real local `/api/download` handler, so development does not need a public CORS proxy. For local cross-origin testing, set `ALLOWED_ORIGINS` in your shell before starting Vite; the server does not load `.env.local` into Node environment variables. Same-origin usage needs no environment variables or API key.
 
-To check the production frontend build use `pnpm build`. A static `dist/` server alone has no API function. Figma/static preview may display the UI but cannot execute the Vercel/Netlify serverless API.
+To check the production frontend build use `pnpm build`. A static `dist/` server alone has no API function; the frontend uses the direct-provider fallback described above. Full-source Vercel/Netlify deployment remains recommended for server-side validation, bounded response sizes and provider access without relying on browser CORS.
 
 ## Environment variables
 
